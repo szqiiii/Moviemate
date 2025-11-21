@@ -1,0 +1,28 @@
+name: moviemate
+description: A streamlined authentication and dashboard app for tracking movies locally.
+
+publish_to: 'none' # since this is a private project
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared_preferences: ^2.2.2
+  provider: ^6.1.2
+  # Add more if needed, e.g. for voice search, image caching, etc.
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Add paths here if you use custom images, e.g.,
+    # - assets/images/
