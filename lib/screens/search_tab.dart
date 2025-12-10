@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/movie_service.dart';
+import '../models/tmdb_movie.dart';
+import 'movie_details_screen.dart';
 
 class SearchTab extends StatefulWidget {
   @override
@@ -7,14 +11,48 @@ class SearchTab extends StatefulWidget {
 
 class _SearchTabState extends State<SearchTab> {
   final TextEditingController _searchController = TextEditingController();
+  final MovieService _movieService = MovieService();
   
-  final List<Map<String, dynamic>> searchResults = [
-    {'title': 'The Dark Knight', 'genre': 'Action, Crime', 'year': '2008', 'rating': 4.9},
-    {'title': 'Interstellar', 'genre': 'Sci-Fi, Drama', 'year': '2014', 'rating': 4.8},
-    {'title': 'Parasite', 'genre': 'Thriller, Drama', 'year': '2019', 'rating': 4.7},
-    {'title': 'The Matrix', 'genre': 'Sci-Fi, Action', 'year': '1999', 'rating': 4.6},
-    {'title': 'Forrest Gump', 'genre': 'Drama, Romance', 'year': '1994', 'rating': 4.8},
-  ];
+  String _selectedFilter = 'All';
+  List<TMDBMovie> _searchResults = [];
+  bool _isLoading = false;
+  bool _hasSearched = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _searchResults = [];
+        _hasSearched = false;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _hasSearched = true;
+    });
+
+    try {
+      final results = await _movieService.searchTMDBMovies(query);
+      setState(() {
+        _searchResults = results;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Search error: $e');
+      setState(() {
+        _searchResults = [];
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,151 +89,229 @@ class _SearchTabState extends State<SearchTab> {
                 child: TextField(
                   controller: _searchController,
                   style: TextStyle(color: Colors.white, fontSize: 16),
+                  onSubmitted: _performSearch,
                   decoration: InputDecoration(
                     hintText: 'Search movies...',
                     hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
                     prefixIcon: Icon(Icons.search, color: Color(0xFFE535AB), size: 24),
-                    suffixIcon: Icon(Icons.mic, color: Color(0xFFE535AB), size: 24),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear, color: Color(0xFFE535AB), size: 24),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchResults = [];
+                                _hasSearched = false;
+                              });
+                            },
+                          )
+                        : IconButton(
+                            icon: Icon(Icons.search, color: Color(0xFFE535AB), size: 24),
+                            onPressed: () => _performSearch(_searchController.text),
+                          ),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   ),
                 ),
               ),
               
-              SizedBox(height: 20),
-              
-              // Filter Chips
-              Row(
-                children: [
-                  _buildFilterChip('All', true),
-                  SizedBox(width: 12),
-                  _buildFilterChip('Movies', false),
-                  SizedBox(width: 12),
-                  _buildFilterChip('TV Shows', false),
-                  Spacer(),
-                  Container(
-                    padding: EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Color(0xFF2A2F4A),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(Icons.tune, color: Color(0xFFE535AB), size: 20),
-                  ),
-                ],
-              ),
-              
               SizedBox(height: 24),
               
-              // Search Results
-              Text(
-                'Search Results',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+              // Search Results Header
+              if (_hasSearched)
+                Text(
+                  'Search Results (${_searchResults.length})',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
               
-              SizedBox(height: 16),
+              if (_hasSearched) SizedBox(height: 16),
               
+              // Content Area
               Expanded(
-                child: ListView.builder(
-                  itemCount: searchResults.length,
-                  itemBuilder: (ctx, idx) {
-                    final movie = searchResults[idx];
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: Color(0xFF2A2F4A),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
-                            blurRadius: 8,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: EdgeInsets.all(12),
-                        leading: Container(
-                          width: 60,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12),
-                            gradient: LinearGradient(
-                              colors: [Color(0xFFE535AB), Color(0xFF9D4EDD)],
-                            ),
-                          ),
-                          child: Icon(Icons.movie, color: Colors.white, size: 30),
+                child: _isLoading
+                    ? Center(
+                        child: CircularProgressIndicator(
+                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE535AB)),
                         ),
-                        title: Text(
-                          movie['title'],
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        subtitle: Padding(
-                          padding: EdgeInsets.only(top: 6),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${movie['genre']} • ${movie['year']}',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.6),
-                                  fontSize: 13,
+                      )
+                    : !_hasSearched
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.search,
+                                  color: Colors.white.withOpacity(0.3),
+                                  size: 80,
                                 ),
-                              ),
-                              SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Icon(Icons.star, color: Colors.amber, size: 16),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    movie['rating'].toString(),
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                SizedBox(height: 16),
+                                Text(
+                                  'Search for movies',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.6),
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                ],
+                                ),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Type a movie name and press enter',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.4),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _searchResults.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.search_off,
+                                      color: Colors.white.withOpacity(0.3),
+                                      size: 64,
+                                    ),
+                                    SizedBox(height: 16),
+                                    Text(
+                                      'No results found',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : GridView.builder(
+                                padding: EdgeInsets.only(bottom: 20),
+                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  childAspectRatio: 0.55,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 16,
+                                ),
+                                itemCount: _searchResults.length,
+                                itemBuilder: (ctx, idx) {
+                                  final movie = _searchResults[idx];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => MovieDetailsScreen(movie: movie),
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Movie Poster
+                                        Expanded(
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              borderRadius: BorderRadius.circular(12),
+                                              boxShadow: [
+                                                BoxShadow(
+                                                  color: Colors.black.withOpacity(0.3),
+                                                  blurRadius: 8,
+                                                  offset: Offset(0, 4),
+                                                ),
+                                              ],
+                                            ),
+                                            child: Stack(
+                                              children: [
+                                                ClipRRect(
+                                                  borderRadius: BorderRadius.circular(12),
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: MovieService.getTMDBPosterUrl(movie.posterPath),
+                                                    fit: BoxFit.cover,
+                                                    width: double.infinity,
+                                                    placeholder: (context, url) => Container(
+                                                      color: Color(0xFF1A1F3A),
+                                                      child: Center(
+                                                        child: CircularProgressIndicator(
+                                                          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE535AB)),
+                                                          strokeWidth: 2,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    errorWidget: (context, url, error) => Container(
+                                                      color: Color(0xFF1A1F3A),
+                                                      child: Icon(
+                                                        Icons.movie,
+                                                        color: Colors.white54,
+                                                        size: 40,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                                // Rating Badge
+                                                Positioned(
+                                                  top: 8,
+                                                  right: 8,
+                                                  child: Container(
+                                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withOpacity(0.7),
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.star, color: Colors.amber, size: 10),
+                                                        SizedBox(width: 2),
+                                                        Text(
+                                                          movie.voteAverage.toStringAsFixed(1),
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                        SizedBox(height: 8),
+                                        // Movie Title
+                                        Text(
+                                          movie.title,
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        SizedBox(height: 2),
+                                        // Release Year
+                                        Text(
+                                          movie.releaseDate?.split('-')[0] ?? 'N/A',
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.5),
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
                               ),
-                            ],
-                          ),
-                        ),
-                        trailing: Icon(
-                          Icons.chevron_right,
-                          color: Colors.white.withOpacity(0.5),
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFilterChip(String label, bool isSelected) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: isSelected ? Color(0xFFE535AB) : Color(0xFF2A2F4A),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
         ),
       ),
     );

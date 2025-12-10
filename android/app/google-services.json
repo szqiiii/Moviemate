@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "850556177232",
+    "project_id": "moviemate-c09fe",
+    "storage_bucket": "moviemate-c09fe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:850556177232:android:d7d724523158a88f2f7a55",
+        "android_client_info": {
+          "package_name": "com.example.moviemate"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCjO3CmWsoEoOiNRWmD0h3TvA_GyiPnF1Y"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -42,3 +42,26 @@ android {
 flutter {
     source = "../.."
 }
+// At the top, after 'com.android.application'
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    // ... existing config
+    
+    defaultConfig {
+        // Update minSdkVersion
+        minSdkVersion 21  // Change from 16 to 21
+    }
+}
+
+dependencies {
+    // Add at the bottom
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+}
+
+// Add at the very bottom of the file
+apply plugin: 'com.google.gms.google-services'
