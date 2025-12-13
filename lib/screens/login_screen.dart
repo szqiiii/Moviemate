@@ -80,55 +80,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _showForgotPasswordDialog() {
-    final emailController = TextEditingController();
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Color(0xFF2d2d44),
-        title: Text('Reset Password', style: TextStyle(color: Colors.white)),
-        content: TextField(
-          controller: emailController,
-          style: TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            hintText: 'Enter your email',
-            hintStyle: TextStyle(color: Colors.white54),
-            filled: true,
-            fillColor: Colors.white.withOpacity(0.1),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel', style: TextStyle(color: Colors.white70)),
-          ),
-          TextButton(
-            onPressed: () async {
-              if (emailController.text.isNotEmpty) {
-                final authService = Provider.of<AuthService>(context, listen: false);
-                final result = await authService.resetPassword(emailController.text.trim());
-                Navigator.pop(context);
-                
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(result['message']),
-                    backgroundColor: result['success'] ? Colors.green : Colors.red,
-                  ),
-                );
-              }
-            },
-            child: Text('Send', style: TextStyle(color: Color(0xFF9d4edd))),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -310,24 +261,12 @@ class _LoginScreenState extends State<LoginScreen> {
                         ],
                       ),
                       
-                      // Forgot password
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: _showForgotPasswordDialog,
-                          child: Text(
-                            'Forgot password?',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                      ),
+                      SizedBox(height: 32),
                       
+                      // Error Message
                       if (_errorMsg != null)
                         Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
+                          padding: EdgeInsets.only(bottom: 16),
                           child: Container(
                             padding: EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -367,8 +306,6 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                         ),
-                      
-                      SizedBox(height: 24),
                       
                       // Login button
                       _loading
@@ -427,51 +364,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ),
-                      ),
-
-                      SizedBox(height: 32),
-
-                      // Demo credentials
-                      Container(
-                        padding: EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.1),
-                          ),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  color: Colors.white.withOpacity(0.7),
-                                  size: 20,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Demo Credentials',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 12),
-                            Text(
-                              'Create accounts using the registration code:\nMOVIEMATE2024',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 12,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
                         ),
                       ),
                     ],

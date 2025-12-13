@@ -24,7 +24,7 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _showAdminCode = false;
 
   // Fallback admin registration code (for initial setup only!)
-  static const String FALLBACK_ADMIN_CODE = "MOVIEMATE2024";
+  static const String FALLBACK_ADMIN_CODE = "MOVIEMATE";
 
   @override
   void dispose() {
@@ -530,36 +530,6 @@ class _SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                         ],
-                      ),
-
-                      SizedBox(height: 24),
-
-                      // Admin code hint (for development - remove in production)
-                      Container(
-                        padding: EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.blue.withOpacity(0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline,
-                                color: Colors.blue, size: 16),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Demo Admin Code: MOVIEMATE2024',
-                                style: TextStyle(
-                                  color: Colors.blue,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ],
                   ),

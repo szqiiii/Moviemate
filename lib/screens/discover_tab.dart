@@ -13,8 +13,7 @@ class DiscoverTab extends StatefulWidget {
 class _DiscoverTabState extends State<DiscoverTab> {
   final MovieService _movieService = MovieService();
   
-  List<TMDBMovie> _trendingMovies = [];
-  List<TMDBMovie> _allMovies = [];
+  List<TMDBMovie> _displayedMovies = [];
   
   bool _isLoading = true;
   String _selectedCategory = 'Popular';
@@ -26,11 +25,33 @@ class _DiscoverTabState extends State<DiscoverTab> {
   }
 
   Future<void> _loadMovies() async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
-      final movies = await _movieService.getTMDBPopularMovies();
+      List<TMDBMovie> movies = [];
+      
+      // Fetch different movies based on selected category
+      switch (_selectedCategory) {
+        case 'Trending':
+          movies = await _movieService.getTMDBTrendingMovies();
+          break;
+        case 'Popular':
+          movies = await _movieService.getTMDBPopularMovies();
+          break;
+        case 'Top Rated':
+          movies = await _movieService.getTMDBTopRatedMovies();
+          break;
+        case 'Upcoming':
+          movies = await _movieService.getTMDBUpcomingMovies();
+          break;
+        default:
+          movies = await _movieService.getTMDBPopularMovies();
+      }
+      
       setState(() {
-        _trendingMovies = movies;
-        _allMovies = movies;
+        _displayedMovies = movies;
         _isLoading = false;
       });
     } catch (e) {
@@ -44,9 +65,8 @@ class _DiscoverTabState extends State<DiscoverTab> {
   void _filterByCategory(String category) {
     setState(() {
       _selectedCategory = category;
-      // You can add different filtering logic here
-      // For now, we'll just update the selected category
     });
+    _loadMovies(); // Reload movies when category changes
   }
 
   Widget _buildCategoryChip(String label, {required bool isSelected}) {
@@ -222,131 +242,112 @@ class _DiscoverTabState extends State<DiscoverTab> {
         ),
       ),
       child: SafeArea(
-        child: _isLoading
-            ? Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE535AB)),
-                ),
-              )
-            : Column(
+        child: Column(
+          children: [
+            // Header Section
+            Padding(
+              padding: EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header Section
-                  Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // Title
+                  Text(
+                    'Discover',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+
+                  // Category Chips
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                       children: [
-                        // Title
-                        Text(
-                          'Discover',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
+                        _buildCategoryChip(
+                          'Trending',
+                          isSelected: _selectedCategory == 'Trending',
                         ),
-                        SizedBox(height: 20),
-
-                        // Category Chips
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              _buildCategoryChip(
-                                'Trending',
-                                isSelected: _selectedCategory == 'Trending',
-                              ),
-                              SizedBox(width: 12),
-                              _buildCategoryChip(
-                                'Popular',
-                                isSelected: _selectedCategory == 'Popular',
-                              ),
-                              SizedBox(width: 12),
-                              _buildCategoryChip(
-                                'Top Rated',
-                                isSelected: _selectedCategory == 'Top Rated',
-                              ),
-                              SizedBox(width: 12),
-                              _buildCategoryChip(
-                                'Upcoming',
-                                isSelected: _selectedCategory == 'Upcoming',
-                              ),
-                            ],
-                          ),
+                        SizedBox(width: 12),
+                        _buildCategoryChip(
+                          'Popular',
+                          isSelected: _selectedCategory == 'Popular',
                         ),
-
-                        SizedBox(height: 20),
-
-                        // Section Title
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'All Movies',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                            DropdownButton<String>(
-                              value: _selectedCategory,
-                              dropdownColor: Color(0xFF2A2F4A),
-                              icon: Icon(Icons.arrow_drop_down, color: Colors.white),
-                              underline: SizedBox(),
-                              style: TextStyle(color: Colors.white, fontSize: 14),
-                              items: ['Popular', 'Top Rated', 'Trending', 'Upcoming']
-                                  .map((String value) {
-                                return DropdownMenuItem<String>(
-                                  value: value,
-                                  child: Text(value),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) {
-                                  _filterByCategory(newValue);
-                                }
-                              },
-                            ),
-                          ],
+                        SizedBox(width: 12),
+                        _buildCategoryChip(
+                          'Top Rated',
+                          isSelected: _selectedCategory == 'Top Rated',
+                        ),
+                        SizedBox(width: 12),
+                        _buildCategoryChip(
+                          'Upcoming',
+                          isSelected: _selectedCategory == 'Upcoming',
                         ),
                       ],
                     ),
                   ),
 
-                  // Movies Grid
-                  Expanded(
-                    child: _allMovies.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.movie_outlined,
-                                  size: 80,
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
-                                SizedBox(height: 16),
-                                Text(
-                                  'No movies available',
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(0.5),
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView(
-                            padding: EdgeInsets.symmetric(horizontal: 20),
-                            children: [
-                              _buildMovieGrid(_allMovies),
-                              SizedBox(height: 20),
-                            ],
-                          ),
+                  SizedBox(height: 20),
+
+                  // Section Title
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _selectedCategory,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
+            ),
+
+            // Movies Grid
+            Expanded(
+              child: _isLoading
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE535AB)),
+                      ),
+                    )
+                  : _displayedMovies.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.movie_outlined,
+                                size: 80,
+                                color: Colors.white.withOpacity(0.3),
+                              ),
+                              SizedBox(height: 16),
+                              Text(
+                                'No movies available',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          children: [
+                            _buildMovieGrid(_displayedMovies),
+                            SizedBox(height: 20),
+                          ],
+                        ),
+            ),
+          ],
+        ),
       ),
     );
   }

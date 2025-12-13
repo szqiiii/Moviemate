@@ -114,7 +114,7 @@ class MovieService {
     }
   }
 
-  // ========== TMDB API METHODS (NEW) ==========
+  // ========== TMDB API METHODS ==========
 
   /// Get popular movies from TMDB
   Future<List<TMDBMovie>> getTMDBPopularMovies() async {
@@ -137,6 +137,81 @@ class MovieService {
       }
     } catch (e) {
       print('TMDB popular movies error: $e');
+      return [];
+    }
+  }
+
+  /// Get trending movies from TMDB (trending this week)
+  Future<List<TMDBMovie>> getTMDBTrendingMovies() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$tmdbBaseUrl/trending/movie/week?api_key=$tmdbApiKey'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<TMDBMovie> movies = [];
+
+        for (var item in data['results']) {
+          movies.add(TMDBMovie.fromJson(item));
+        }
+
+        return movies;
+      } else {
+        throw Exception('Failed to load trending movies');
+      }
+    } catch (e) {
+      print('TMDB trending movies error: $e');
+      return [];
+    }
+  }
+
+  /// Get top rated movies from TMDB
+  Future<List<TMDBMovie>> getTMDBTopRatedMovies() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$tmdbBaseUrl/movie/top_rated?api_key=$tmdbApiKey'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<TMDBMovie> movies = [];
+
+        for (var item in data['results']) {
+          movies.add(TMDBMovie.fromJson(item));
+        }
+
+        return movies;
+      } else {
+        throw Exception('Failed to load top rated movies');
+      }
+    } catch (e) {
+      print('TMDB top rated movies error: $e');
+      return [];
+    }
+  }
+
+  /// Get upcoming movies from TMDB
+  Future<List<TMDBMovie>> getTMDBUpcomingMovies() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$tmdbBaseUrl/movie/upcoming?api_key=$tmdbApiKey'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        List<TMDBMovie> movies = [];
+
+        for (var item in data['results']) {
+          movies.add(TMDBMovie.fromJson(item));
+        }
+
+        return movies;
+      } else {
+        throw Exception('Failed to load upcoming movies');
+      }
+    } catch (e) {
+      print('TMDB upcoming movies error: $e');
       return [];
     }
   }

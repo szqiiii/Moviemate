@@ -441,9 +441,28 @@ class _DiaryTabState extends State<DiaryTab> with SingleTickerProviderStateMixin
     final posterPath = data['posterPath'] ?? '';
     final rating = data['rating'] ?? 0;
     final review = data['review'] ?? '';
-    final overview = data['overview'] ?? 'No synopsis available';
+    
+    // FIXED: Better handling of overview with debugging
+    String overview = '';
+    if (data.containsKey('overview')) {
+      overview = data['overview']?.toString() ?? '';
+    }
+    
+    // If overview is empty, set default message
+    if (overview.trim().isEmpty) {
+      overview = 'No synopsis available for this movie.';
+    }
+    
     final releaseDate = data['releaseDate'] ?? '';
     final voteAverage = data['voteAverage'] ?? 0.0;
+
+    // DEBUG: Print to console to check data
+    print('=== Movie Details Debug ===');
+    print('Title: $title');
+    print('Overview from data: ${data['overview']}');
+    print('Overview to display: $overview');
+    print('Overview length: ${overview.length}');
+    print('========================');
 
     showModalBottomSheet(
       context: context,
@@ -611,7 +630,7 @@ class _DiaryTabState extends State<DiaryTab> with SingleTickerProviderStateMixin
                 SizedBox(height: 24),
               ],
               
-              // Synopsis
+              // Synopsis - FIXED
               Text(
                 'Synopsis',
                 style: TextStyle(
@@ -621,12 +640,23 @@ class _DiaryTabState extends State<DiaryTab> with SingleTickerProviderStateMixin
                 ),
               ),
               SizedBox(height: 8),
-              Text(
-                overview,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 15,
-                  height: 1.5,
+              Container(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Color(0xFF0A0E27),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Color(0xFF2A2F4A),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  overview,
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 15,
+                    height: 1.5,
+                  ),
                 ),
               ),
               

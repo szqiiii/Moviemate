@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/movie_service.dart';
 
@@ -13,18 +14,24 @@ class ProfileTab extends StatefulWidget {
 class _ProfileTabState extends State<ProfileTab> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final AuthService _authService = AuthService();
   Map<String, dynamic>? userData;
   bool isLoading = true;
 
   List<DocumentSnapshot> _watchedMovies = [];
+  List<DocumentSnapshot> _watchlistMovies = [];
   
   // Stats data
-  int totalMovies = 0;
+  int totalWatched = 0;
+  int totalWatchlist = 0;
   int totalReviews = 0;
   double avgRating = 0.0;
-  String totalRuntime = '0h 0m';
-  Map<String, int> genreDistribution = {};
+  int moviesRated5Stars = 0;
+  int moviesRated4Stars = 0;
+  int moviesRated3Stars = 0;
+  int moviesRated2Stars = 0;
+  int moviesRated1Star = 0;
+  String favoriteYear = 'N/A';
+  String mostWatchedMonth = 'N/A';
 
   @override
   void initState() {
@@ -42,10 +49,33 @@ class _ProfileTabState extends State<ProfileTab> {
         return;
       }
 
-      final data = await _authService.getUserData();
-      if (data != null) {
+      // Fetch user data directly from Firestore
+      final doc = await _firestore
+          .collection('users')
+          .doc(_auth.currentUser!.uid)
+          .get();
+
+      if (doc.exists) {
         setState(() {
-          userData = data;
+          userData = doc.data();
+        });
+      } else {
+        // If user doc doesn't exist, create it
+        await _firestore.collection('users').doc(_auth.currentUser!.uid).set({
+          'email': _auth.currentUser!.email,
+          'username': _auth.currentUser!.displayName ?? 'User',
+          'bio': '',
+          'role': 'user',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        
+        // Reload user data
+        final newDoc = await _firestore
+            .collection('users')
+            .doc(_auth.currentUser!.uid)
+            .get();
+        setState(() {
+          userData = newDoc.data();
         });
       }
     } catch (e) {
@@ -74,6 +104,11 @@ class _ProfileTabState extends State<ProfileTab> {
           return data['watched'] == true;
         }).toList();
 
+        _watchlistMovies = snapshot.docs.where((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          return data['inWatchlist'] == true && data['watched'] != true;
+        }).toList();
+
         // Calculate stats
         _calculateStats();
       }
@@ -91,46 +126,94 @@ class _ProfileTabState extends State<ProfileTab> {
 
   void _calculateStats() {
     // Basic counts
-    totalMovies = _watchedMovies.length;
+    totalWatched = _watchedMovies.length;
+    totalWatchlist = _watchlistMovies.length;
     
+    // Reviews count (movies with written reviews)
+    totalReviews = _watchedMovies.where((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      final review = data['review']?.toString() ?? '';
+      return review.trim().isNotEmpty;
+    }).length;
+
+    // Rating statistics
     final ratedMovies = _watchedMovies.where((doc) {
       final data = doc.data() as Map<String, dynamic>;
       return data['rating'] != null && data['rating'] > 0;
     }).toList();
-    
-    totalReviews = ratedMovies.length;
 
-    // Average rating
-    if (totalReviews > 0) {
+    if (ratedMovies.isNotEmpty) {
       double totalRating = 0;
+      
+      // Reset counters
+      moviesRated5Stars = 0;
+      moviesRated4Stars = 0;
+      moviesRated3Stars = 0;
+      moviesRated2Stars = 0;
+      moviesRated1Star = 0;
+      
       for (var doc in ratedMovies) {
         final data = doc.data() as Map<String, dynamic>;
-        totalRating += (data['rating'] ?? 0).toDouble();
+        final rating = (data['rating'] ?? 0);
+        totalRating += rating.toDouble();
+
+        // Count by rating
+        if (rating == 5) moviesRated5Stars++;
+        else if (rating == 4) moviesRated4Stars++;
+        else if (rating == 3) moviesRated3Stars++;
+        else if (rating == 2) moviesRated2Stars++;
+        else if (rating == 1) moviesRated1Star++;
       }
-      avgRating = totalRating / totalReviews;
+      avgRating = totalRating / ratedMovies.length;
     }
 
-    // Calculate total runtime (assuming average 2h movie)
-    int totalMinutes = totalMovies * 120;
-    int hours = totalMinutes ~/ 60;
-    int minutes = totalMinutes % 60;
-    totalRuntime = '${hours}h ${minutes}m';
+    // Calculate favorite year
+    _calculateFavoriteYear();
 
-    // Calculate genre distribution
-    _calculateGenreDistribution();
+    // Calculate most watched month
+    _calculateMostWatchedMonth();
   }
 
-  void _calculateGenreDistribution() {
-    genreDistribution.clear();
+  void _calculateFavoriteYear() {
+    Map<String, int> yearCounts = {};
+    
     for (var doc in _watchedMovies) {
       final data = doc.data() as Map<String, dynamic>;
-      final genres = data['genres'] as List<dynamic>?;
-      if (genres != null) {
-        for (var genre in genres) {
-          genreDistribution[genre.toString()] = 
-              (genreDistribution[genre.toString()] ?? 0) + 1;
-        }
+      final releaseDate = data['releaseDate']?.toString() ?? '';
+      if (releaseDate.isNotEmpty) {
+        final year = releaseDate.split('-')[0];
+        yearCounts[year] = (yearCounts[year] ?? 0) + 1;
       }
+    }
+
+    if (yearCounts.isNotEmpty) {
+      final sortedYears = yearCounts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      favoriteYear = sortedYears.first.key;
+    }
+  }
+
+  void _calculateMostWatchedMonth() {
+    Map<String, int> monthCounts = {};
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+
+    for (var doc in _watchedMovies) {
+      final data = doc.data() as Map<String, dynamic>;
+      final updatedAt = data['updatedAt'] as Timestamp?;
+      if (updatedAt != null) {
+        final date = updatedAt.toDate();
+        final monthKey = monthNames[date.month - 1];
+        monthCounts[monthKey] = (monthCounts[monthKey] ?? 0) + 1;
+      }
+    }
+
+    if (monthCounts.isNotEmpty) {
+      final sortedMonths = monthCounts.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      mostWatchedMonth = sortedMonths.first.key;
     }
   }
 
@@ -142,108 +225,226 @@ class _ProfileTabState extends State<ProfileTab> {
       text: userData?['bio'] ?? '',
     );
 
+    // Save the context before the async gap
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     await showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Color(0xFF1A1F3A),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: Text(
-          'Edit Profile',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: usernameController,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Username',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                  filled: true,
-                  fillColor: Color(0xFF0A0E27),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+      builder: (dialogContext) {
+        bool isSaving = false;
+        
+        return StatefulBuilder(
+          builder: (statefulContext, setDialogState) => AlertDialog(
+            backgroundColor: Color(0xFF1A1F3A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.edit, color: Color(0xFFE535AB)),
+                SizedBox(width: 12),
+                Text(
+                  'Edit Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
                   ),
-                  prefixIcon: Icon(Icons.person, color: Color(0xFFE535AB)),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Username Field
+                  Text(
+                    'Username',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    controller: usernameController,
+                    style: TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Enter username',
+                      hintStyle: TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: Color(0xFF0A0E27),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Color(0xFFE535AB),
+                          width: 2,
+                        ),
+                      ),
+                      prefixIcon: Icon(Icons.person, color: Color(0xFFE535AB)),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 16,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  
+                  // Bio Field
+                  Text(
+                    'Bio',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  TextField(
+                    controller: bioController,
+                    style: TextStyle(color: Colors.white),
+                    maxLines: 4,
+                    maxLength: 150,
+                    decoration: InputDecoration(
+                      hintText: 'Tell us about yourself...',
+                      hintStyle: TextStyle(color: Colors.white38),
+                      filled: true,
+                      fillColor: Color(0xFF0A0E27),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none,
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: Color(0xFFE535AB),
+                          width: 2,
+                        ),
+                      ),
+                      prefixIcon: Padding(
+                        padding: EdgeInsets.only(bottom: 60),
+                        child: Icon(Icons.info_outline, color: Color(0xFFE535AB)),
+                      ),
+                      contentPadding: EdgeInsets.all(16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: isSaving ? null : () {
+                  usernameController.dispose();
+                  bioController.dispose();
+                  Navigator.pop(dialogContext);
+                },
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(color: Colors.white54),
                 ),
               ),
-              SizedBox(height: 16),
-              TextField(
-                controller: bioController,
-                maxLines: 4,
-                style: TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Bio',
-                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.6)),
-                  filled: true,
-                  fillColor: Color(0xFF0A0E27),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFE535AB), Color(0xFF9D4EDD)],
                   ),
-                  prefixIcon: Icon(Icons.description, color: Color(0xFFE535AB)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: TextButton(
+                  onPressed: isSaving ? null : () async {
+                    final newUsername = usernameController.text.trim();
+                    final newBio = bioController.text.trim();
+                    
+                    if (newUsername.isEmpty) {
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Username cannot be empty'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
+
+                    if (newUsername.length < 3) {
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Username must be at least 3 characters'),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      return;
+                    }
+
+                    setDialogState(() => isSaving = true);
+
+                    try {
+                      final user = _auth.currentUser;
+                      if (user != null) {
+                        // Update Firestore
+                        await _firestore.collection('users').doc(user.uid).update({
+                          'username': newUsername,
+                          'bio': newBio,
+                          'updatedAt': FieldValue.serverTimestamp(),
+                        });
+                        
+                        // Update local state immediately
+                        setState(() {
+                          if (userData == null) {
+                            userData = {};
+                          }
+                          userData!['username'] = newUsername;
+                          userData!['bio'] = newBio;
+                        });
+                        
+                        usernameController.dispose();
+                        bioController.dispose();
+                        Navigator.pop(dialogContext);
+                        
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: Text('Profile updated successfully!'),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      print('Error updating profile: $e');
+                      setDialogState(() => isSaving = false);
+                      scaffoldMessenger.showSnackBar(
+                        SnackBar(
+                          content: Text('Error: ${e.toString()}'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  },
+                  child: isSaving
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Text(
+                          'Save',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                 ),
               ),
             ],
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: TextStyle(color: Colors.white54)),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newUsername = usernameController.text.trim();
-              final newBio = bioController.text.trim();
-              
-              if (newUsername.isEmpty) return;
-
-              try {
-                final user = _auth.currentUser;
-                if (user != null) {
-                  await _firestore.collection('users').doc(user.uid).update({
-                    'username': newUsername,
-                    'bio': newBio,
-                    'updatedAt': FieldValue.serverTimestamp(),
-                  });
-                  
-                  setState(() {
-                    userData?['username'] = newUsername;
-                    userData?['bio'] = newBio;
-                  });
-                  
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Profile updated!'),
-                      backgroundColor: Color(0xFFE535AB),
-                    ),
-                  );
-                }
-              } catch (e) {
-                print('Error updating profile: $e');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error updating profile'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFFE535AB),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: Text('Save'),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -258,35 +459,21 @@ class _ProfileTabState extends State<ProfileTab> {
             height: 100,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Color(0xFFE535AB), width: 3),
+              gradient: LinearGradient(
+                colors: [Color(0xFFE535AB), Color(0xFF9D4EDD)],
+              ),
             ),
-            child: CircleAvatar(
-              radius: 47,
-              backgroundColor: Color(0xFF1A1F3A),
-              child: userData?['photoURL'] != null
-                  ? ClipOval(
-                      child: CachedNetworkImage(
-                        imageUrl: userData!['photoURL'],
-                        width: 94,
-                        height: 94,
-                        fit: BoxFit.cover,
-                        placeholder: (context, url) => Icon(
-                          Icons.person,
-                          size: 50,
-                          color: Colors.white54,
-                        ),
-                        errorWidget: (context, url, error) => Icon(
-                          Icons.person,
-                          size: 50,
-                          color: Colors.white54,
-                        ),
-                      ),
-                    )
-                  : Icon(
-                      Icons.person,
-                      size: 50,
-                      color: Colors.white54,
-                    ),
+            child: Container(
+              margin: EdgeInsets.all(3),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF1A1F3A),
+              ),
+              child: Icon(
+                Icons.person,
+                size: 50,
+                color: Colors.white54,
+              ),
             ),
           ),
           SizedBox(height: 16),
@@ -310,11 +497,16 @@ class _ProfileTabState extends State<ProfileTab> {
             ),
             textAlign: TextAlign.center,
           ),
-          SizedBox(height: 12),
+          
           // Bio
-          if (userData?['bio'] != null && userData!['bio'].isNotEmpty)
+          if (userData?['bio'] != null && userData!['bio'].toString().isNotEmpty) ...[
+            SizedBox(height: 12),
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Color(0xFF1A1F3A).withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Text(
                 userData!['bio'],
                 style: TextStyle(
@@ -323,23 +515,30 @@ class _ProfileTabState extends State<ProfileTab> {
                   height: 1.4,
                 ),
                 textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
-          SizedBox(height: 16),
-          // Edit Profile Button
-          ElevatedButton.icon(
-            onPressed: _showEditProfileDialog,
-            icon: Icon(Icons.edit, size: 18),
-            label: Text('Edit Profile'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFFE535AB),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+          ],
+          
+          SizedBox(height: 12),
+          // Role Badge
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: userData?['role'] == 'admin'
+                    ? [Colors.amber, Colors.orange]
+                    : [Color(0xFFE535AB), Color(0xFF9D4EDD)],
               ),
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              userData?['role'] == 'admin' ? 'ADMIN' : 'USER',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+              ),
             ),
           ),
         ],
@@ -374,7 +573,7 @@ class _ProfileTabState extends State<ProfileTab> {
               SizedBox(height: 20),
               ElevatedButton(
                 onPressed: () {
-                  Navigator.of(context).pushNamed('/login');
+                  Navigator.of(context).pushReplacementNamed('/login');
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Color(0xFFE535AB),
@@ -412,13 +611,13 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: Align(
                       alignment: Alignment.topRight,
                       child: IconButton(
-                        icon: Icon(Icons.settings_outlined, color: Colors.white),
+                        icon: Icon(Icons.settings_outlined, color: Colors.white, size: 28),
                         onPressed: _showSettingsDialog,
                       ),
                     ),
                   ),
                   
-                  // User Profile Header (Centered)
+                  // User Profile Header
                   _buildUserProfileHeader(),
                   
                   SizedBox(height: 8),
@@ -429,19 +628,19 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildTopStat(totalMovies.toString(), 'Films'),
+                        _buildTopStat(totalWatched.toString(), 'Watched'),
+                        Container(
+                          height: 40,
+                          width: 1,
+                          color: Colors.white24,
+                        ),
+                        _buildTopStat(totalWatchlist.toString(), 'Watchlist'),
                         Container(
                           height: 40,
                           width: 1,
                           color: Colors.white24,
                         ),
                         _buildTopStat(totalReviews.toString(), 'Reviews'),
-                        Container(
-                          height: 40,
-                          width: 1,
-                          color: Colors.white24,
-                        ),
-                        _buildTopStat(avgRating.toStringAsFixed(1), 'Avg Rating'),
                       ],
                     ),
                   ),
@@ -457,9 +656,6 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Widget _buildStatSection() {
-    final sortedGenres = genreDistribution.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    
     return Container(
       margin: EdgeInsets.symmetric(horizontal: 20),
       padding: EdgeInsets.all(20),
@@ -491,34 +687,38 @@ class _ProfileTabState extends State<ProfileTab> {
           ),
           SizedBox(height: 20),
           
-          _buildStatRow('Films watched', totalMovies.toString()),
-          _buildStatRow('Total runtime', totalRuntime),
+          _buildStatRow('Films watched', totalWatched.toString()),
+          _buildStatRow('Watchlist', totalWatchlist.toString()),
+          _buildStatRow('Reviews written', totalReviews.toString()),
           _buildStatRow('Mean rating', avgRating > 0 ? '${avgRating.toStringAsFixed(1)} ★' : '0.0 ★'),
+          _buildStatRow('Favorite year', favoriteYear),
+          _buildStatRow('Most active month', mostWatchedMonth),
           
-          if (genreDistribution.isNotEmpty) ...[
-            SizedBox(height: 24),
-            Row(
-              children: [
-                Icon(Icons.category, color: Color(0xFF9D4EDD), size: 18),
-                SizedBox(width: 8),
-                Text(
-                  'TOP GENRES',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+          SizedBox(height: 24),
+          
+          // Rating Distribution
+          Row(
+            children: [
+              Icon(Icons.star, color: Colors.amber, size: 18),
+              SizedBox(width: 8),
+              Text(
+                'RATING DISTRIBUTION',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
                 ),
-              ],
-            ),
-            SizedBox(height: 16),
-            
-            ...sortedGenres.take(5).map((entry) {
-              final percentage = entry.value / (totalMovies == 0 ? 1 : totalMovies);
-              return _buildGenreBar(entry.key, percentage, entry.value);
-            }).toList(),
-          ],
+              ),
+            ],
+          ),
+          SizedBox(height: 16),
+          
+          _buildRatingBar('5 Stars', moviesRated5Stars, Colors.green),
+          _buildRatingBar('4 Stars', moviesRated4Stars, Colors.lightGreen),
+          _buildRatingBar('3 Stars', moviesRated3Stars, Colors.orange),
+          _buildRatingBar('2 Stars', moviesRated2Stars, Colors.deepOrange),
+          _buildRatingBar('1 Star', moviesRated1Star, Colors.red),
         ],
       ),
     );
@@ -573,7 +773,10 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  Widget _buildGenreBar(String genre, double percentage, int count) {
+  Widget _buildRatingBar(String label, int count, Color color) {
+    final total = totalWatched > 0 ? totalWatched : 1;
+    final percentage = count / total;
+    
     return Padding(
       padding: EdgeInsets.only(bottom: 14),
       child: Column(
@@ -583,7 +786,7 @@ class _ProfileTabState extends State<ProfileTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                genre,
+                label,
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 14,
@@ -614,9 +817,7 @@ class _ProfileTabState extends State<ProfileTab> {
                 child: Container(
                   height: 10,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFE535AB), Color(0xFF9D4EDD)],
-                    ),
+                    color: color,
                     borderRadius: BorderRadius.circular(5),
                   ),
                 ),
@@ -634,7 +835,13 @@ class _ProfileTabState extends State<ProfileTab> {
       builder: (ctx) => AlertDialog(
         backgroundColor: Color(0xFF1A1F3A),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Row(
+          children: [
+            Icon(Icons.settings, color: Color(0xFFE535AB)),
+            SizedBox(width: 12),
+            Text('Settings', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -642,54 +849,72 @@ class _ProfileTabState extends State<ProfileTab> {
               ListTile(
                 leading: Icon(Icons.person, color: Color(0xFFE535AB)),
                 title: Text('Edit Profile', style: TextStyle(color: Colors.white)),
+                subtitle: Text('Update your username and bio', style: TextStyle(color: Colors.white54, fontSize: 12)),
                 onTap: () {
                   Navigator.pop(ctx);
                   _showEditProfileDialog();
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.privacy_tip, color: Color(0xFF4CAF50)),
-                title: Text('Privacy Settings', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  // Implement privacy settings
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.notifications, color: Color(0xFF2196F3)),
-                title: Text('Notifications', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  // Implement notification settings
-                },
-              ),
-              ListTile(
-                leading: Icon(Icons.help, color: Color(0xFFFF9800)),
-                title: Text('Help & Support', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  // Implement help & support
                 },
               ),
               Divider(color: Colors.white24, height: 20),
               ListTile(
                 leading: Icon(Icons.logout, color: Colors.red),
                 title: Text('Logout', style: TextStyle(color: Colors.red)),
+                subtitle: Text('Sign out of your account', style: TextStyle(color: Colors.white54, fontSize: 12)),
                 onTap: () async {
                   Navigator.pop(ctx);
-                  try {
-                    await _authService.logout();
-                    if (mounted) {
-                      Navigator.of(context).pushReplacementNamed('/login');
-                    }
-                  } catch (e) {
-                    print('Error logging out: $e');
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Error logging out'),
-                        backgroundColor: Colors.red,
+                  
+                  // Show confirmation dialog
+                  final shouldLogout = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: Color(0xFF1A1F3A),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      title: Row(
+                        children: [
+                          Icon(Icons.logout, color: Colors.red),
+                          SizedBox(width: 12),
+                          Text('Logout', style: TextStyle(color: Colors.white)),
+                        ],
                       ),
-                    );
+                      content: Text(
+                        'Are you sure you want to logout?',
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: Text('Cancel', style: TextStyle(color: Colors.white54)),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => Navigator.pop(context, true),
+                          child: Text('Logout', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  
+                  if (shouldLogout == true) {
+                    try {
+                      final authService = Provider.of<AuthService>(context, listen: false);
+                      await authService.logout();
+                      if (mounted) {
+                        Navigator.of(context).pushReplacementNamed('/login');
+                      }
+                    } catch (e) {
+                      print('Error logging out: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Error logging out'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
                   }
                 },
               ),

@@ -50,7 +50,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       if (doc.exists) {
         setState(() {
           isWatched = doc.data()?['watched'] ?? false;
-          isWatchlist = doc.data()?['inWatchlist'] ?? false; // FIXED: Changed from 'watchlist' to 'inWatchlist'
+          isWatchlist = doc.data()?['inWatchlist'] ?? false;
           selectedRating = doc.data()?['rating'] ?? 0;
           _reviewController.text = doc.data()?['review'] ?? '';
         });
@@ -81,17 +81,23 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     });
 
     try {
+      // FIXED: Ensure overview is never null or empty
+      String overview = widget.movie.overview ?? '';
+      if (overview.trim().isEmpty) {
+        overview = 'No synopsis available.';
+      }
+
       await _firestore.collection('user_movies').doc('${user.uid}_${widget.movie.id}').set({
         'userId': user.uid,
         'movieId': widget.movie.id.toString(),
         'movieTitle': widget.movie.title,
-        'posterPath': widget.movie.posterPath,
-        'overview': widget.movie.overview ?? '',
+        'posterPath': widget.movie.posterPath ?? '',
+        'overview': overview, // FIXED: Always save a valid overview
         'rating': selectedRating,
         'review': _reviewController.text.trim(),
         'watched': isWatched || selectedRating > 0,
-        'inWatchlist': isWatchlist, // FIXED: Changed from 'watchlist' to 'inWatchlist'
-        'releaseDate': widget.movie.releaseDate,
+        'inWatchlist': isWatchlist,
+        'releaseDate': widget.movie.releaseDate ?? '',
         'voteAverage': widget.movie.voteAverage,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -133,15 +139,21 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
     });
 
     try {
+      // FIXED: Ensure overview is never null or empty
+      String overview = widget.movie.overview ?? '';
+      if (overview.trim().isEmpty) {
+        overview = 'No synopsis available.';
+      }
+
       await _firestore.collection('user_movies').doc('${user.uid}_${widget.movie.id}').set({
         'userId': user.uid,
         'movieId': widget.movie.id.toString(),
         'movieTitle': widget.movie.title,
-        'posterPath': widget.movie.posterPath,
-        'overview': widget.movie.overview ?? '',
+        'posterPath': widget.movie.posterPath ?? '',
+        'overview': overview, // FIXED: Always save a valid overview
         'watched': isWatched,
-        'inWatchlist': isWatchlist, // FIXED: Changed from 'watchlist' to 'inWatchlist'
-        'releaseDate': widget.movie.releaseDate,
+        'inWatchlist': isWatchlist,
+        'releaseDate': widget.movie.releaseDate ?? '',
         'voteAverage': widget.movie.voteAverage,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
@@ -532,7 +544,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                   SizedBox(height: 12),
 
                   Text(
-                    widget.movie.overview ?? 'No synopsis available.',
+                    widget.movie.overview?.isNotEmpty == true 
+                        ? widget.movie.overview! 
+                        : 'No synopsis available.',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 15,
